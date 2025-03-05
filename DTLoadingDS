@@ -1,0 +1,46 @@
+import xlsxwriter
+import numpy as np
+import glob, shutil
+import re
+from pandas import Series
+import datetime as dt
+from dateutil.parser import parse
+import pyodbc
+import csv
+
+####### read excel file into csv file
+df = pd.read_excel('//myNetworkDrive/Datasource/Staged/OTdata/ot_aso.xlsx')  # sheetname is optional
+df.to_csv('//myNetworkDrive/Datasource/Staged/OTdata/ot_as0.csv', encoding="utf-8", index=False)  # index=False prevents pandas to write row index
+
+#df.to_csv('//myNetworkDrive/Datasource/Staged/CTdata/ct_jja.csv', encoding="utf-8", index=False)  # index=False prevents pandas to write row index
+
+### connection strings
+server = 'vtest\maintdev' 
+database = 'Tableau' 
+username = 'tableau_sv_acct' 
+password = 'T@password' 
+## changed from #ODBC Driver 13 for SQL Server#, and it works.
+cnxn = pyodbc.connect('DRIVER={SQL Server};SERVER='+server+';DATABASE='+database+';UID='+username+';PWD='+ password)
+cursor = cnxn.cursor()
+
+# recreate/refresh a table to be ready 
+sql_='DROP TABLE IF EXISTS otS_1'
+### line below sql_ for Cycle Time ###
+cursor.execute(sql_)
+cnxn.commit()
+
+# all strings
+sql = 'CREATE TABLE [dbo].[otS_1] ([Year-Month] NVARCHAR (255) NULL,[Work Order Basic Finish Date] NVARCHAR (255) NULL,[Confirmation Posting Date] NVARCHAR (255)  NULL,[Work Order Number] NVARCHAR (255) NULL,[Work Order Short Text Desc] NVARCHAR (255) NULL,[Work Order Priority Code] NVARCHAR (255) NULL,[Work Order Maint Plan Plant] NVARCHAR (255) NULL,[Work Order Maintenance Plant Code] NVARCHAR (255) NULL,[Work Order Order Type Code] NVARCHAR (255) NULL,[Loc Acct Assignment Cost Ctr Desc] NVARCHAR (255) NULL,[Craft] NVARCHAR (255) NULL,[Confirmation Activity Type] NVARCHAR (255) NULL,[Work Order Functionl Loction] NVARCHAR (255) NULL,[Planner Group] NVARCHAR (255) NULL, [ST Hours] NVARCHAR (255) NULL,[OT Hours] NVARCHAR (255) NULL,[Leader] NVARCHAR (255) NULL,[Confirmation Type] NVARCHAR (255) NULL,[Work Order Maintenance Plant Desc] NVARCHAR (255) NULL,[HR_B-3-4 Exception] NVARCHAR (255) NULL,[Site] NVARCHAR (255) NULL,[Site Rollup] NVARCHAR (255) NULL,[Region] NVARCHAR (255) NULL,[MGL] NVARCHAR (255) NULL,[W#O# Revision] NVARCHAR (255) NULL,[Zone] NVARCHAR (255) NULL,[Scheduling Area] NVARCHAR (255) NULL);'
+### line below sql for Cycle Time ###
+cursor.execute(sql)
+cnxn.commit()
+
+## load into sql ## encoding='utf8' TAKES care of codec issue
+with open('//myNetworkDrive/Datasource/Staged/OTdata/ot_jas.csv',encoding='utf8') as csvfile: #'rb', or 'rt'
+    c_data = csv.reader(csvfile)
+    for row in c_data:
+        cursor.execute('INSERT INTO [otS_1]([Year-Month],[Work Order Basic Finish Date],[Confirmation Posting Date],[Work Order Number],[Work Order Short Text Desc],[Work Order Priority Code],[Work Order Maint Plan Plant],[Work Order Maintenance Plant Code],[Work Order Order Type Code],[Loc Acct Assignment Cost Ctr Desc],[Craft],[Confirmation Activity Type],[Work Order Functionl Loction],[Planner Group],[ST Hours],[OT Hours],[Leader],[Confirmation Type],[Work Order Maintenance Plant Desc],[HR_B-3-4 Exception],[Site],[Site Rollup],[Region],[MGL],[W#O# Revision],[Zone],[Scheduling Area]) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);',row)
+        cnxn.commit()
+    cursor.close()
+    print("Successfully completed!")
+    cnxn.close()
