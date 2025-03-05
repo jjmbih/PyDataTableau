@@ -1,0 +1,188 @@
+import pandas as pd
+import xlsxwriter
+import numpy as np
+import glob, shutil
+import re
+from pandas import Series
+import datetime as dt
+from dateutil.parser import parse
+
+#list all raw filed downloaded
+glob.glob('//networkDrive/ DSR/ct*.xlsx')
+
+#append all raw files
+all_CT_ = pd.DataFrame()
+for f in glob.glob('//networkDrive/ DSR/ct*.xlsx'):
+    df = pd.read_excel(f,skiprows=46,skipfooter=1)
+    all_CT_ = all_CT_.append(df)
+    #all_CT_ = all_CT_.append(df,ignore_index=True)
+	
+#save the file to be merged with master file
+writer = pd.ExcelWriter('//networkDrive/Datasource/Staged/ct_ALL.xlsx', engine='xlsxwriter')
+all_CT_.to_excel(writer, sheet_name='T')
+writer.save()
+
+#archive raw files
+CT_ =['//networkDrive//Datasource/Raw DSR/ct*'] 
+for file in CT_:
+     for f in (glob.glob(file)): 
+         shutil.move(f, '//networkDrive/Datasource/Raw DSR/Archived Raw CT/')
+
+#read the processed file to verify unnecessary rows trimmed		 
+df_1 = pd.read_excel('//networkDrive/Datasource/Staged/ct_ALL.xlsx')
+
+df_1.tail()
+
+#save the file
+writer = pd.ExcelWriter('//networkDrive/Staged/ct_L.xlsx', engine='xlsxwriter')
+df_1.to_excel(writer, sheet_name='T')
+writer.save()
+
+#process columns
+df_1 = pd.read_excel('//networkDrive/Datasource/Staged/ct_L.xlsx')
+
+columns = ['Reference Date Month/Year','Unnamed: 3']
+df_1.drop(columns, inplace=True, axis=1)
+
+#ensure criteria of removing hours beyond 0 and 200 
+df_1=df_1[(df_1['Average Expectation']) >= 0 ]
+df_1=df_1[(df_1['Average Expectation']) < 200]
+df_1=df_1[(df_1['Average Delivered']) >= 0 ]
+df_1=df_1[(df_1['Average Delivered']) < 200]
+
+df_1.head(3)
+
+#save the file
+writer = pd.ExcelWriter('//networkDrive/Staged/T_fm2_a.xlsx', engine='xlsxwriter')
+df_1.to_excel(writer, sheet_name='T')
+writer.save()
+
+#read meta file for processing
+df_2=pd.read_excel('C:\\Users\\nd12341\\MPL_MGL.xlsx')
+
+#join to bring meta data attributes
+df_3=df_1.merge(df_2[['W.O.Maint Plant Code','RMPL / MPL','Maintenance Plant Name','MGL','Site2','Region','Zone','Scheduling Area']],left_on='WO Maintenance Plant Code',right_on='W.O.Maint Plant Code').fillna("")
+
+df_3.head()
+
+#drop extra key column
+df_3.drop('W.O.Maint Plant Code', axis=1, inplace=True)
+
+#extract priority code
+df_3['WO Priority Code']=df_3.iloc[:,6].str[-1:]
+
+df_3.head()
+
+writer = pd.ExcelWriter('//networkDrive/Staged/T_fm2_.xlsx', engine='xlsxwriter')
+df_3.to_excel(writer, sheet_name='T')
+writer.save()
+
+#add columns
+idx=23
+df_3.insert(loc=idx,column='HR_B-3-4 Exception',value='')
+
+idx=25
+df_3.insert(loc=idx,column='Site Code',value=df_3.iloc[:,1].str[:4])
+
+df_3.head()
+
+#add and reindex Site column
+idx=26
+df_3.insert(loc=idx,column='Site',value=df_3['Site2'])
+
+df_3.drop('Site2', axis=1, inplace=True)
+
+idx=27
+df_3.insert(loc=idx,column='Site Rollup',value='')
+
+idx=28
+df_3.insert(loc=idx,column='Region ',value=df_3['Region'])
+
+df_3.drop('Region', axis=1, inplace=True)
+
+df_3['Region '] = df_3['Region '].str.strip(' \t\n\r')
+
+idx=30
+df_3.insert(loc=idx,column='Revision',value='')
+
+idx=31
+df_3.insert(loc=idx,column='Planner Group',value='')
+
+df_3.head(3)
+
+#save file
+writer = pd.ExcelWriter('//networkDrive/Datasource/Staged/T_fm2_.xlsx', engine='xlsxwriter')
+df_3.to_excel(writer, sheet_name='T')
+writer.save()
+
+#rearrange fields to match master file
+new_cols = ['Work Order Main Work Center','Work Order Maintenance Plant Code','Work Order Functional Location','Work Order Number','Work Order Short Text Desc','WO Order Type Code','Work Order Priority Code','WO Equipment Number','WO Equip Desc.','Equipment Category','Equipment Class','Equipment Type','Work Order Record Create Date','Work Order Actual Release Date','Work Order Basic Finish Date','Work Order Reference Date','Work Order TECO Create Date','Expectation','Released','Delivered','Variance','On Time','Leader','HR_B-3-4 Exception','Work Order Maintenance Plant Desc'
+]
+
+df_3.rename(columns=dict(zip(df_3.columns[[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24]], new_cols)),inplace=True,) # place header at index 4 and 8
+
+df_3.head()
+
+#convert date
+df_3['Work Order Basic Finish Date'] = pd.to_datetime(df_3['Work Order Basic Finish Date'])
+
+df_3['Work Order Basic Finish Date'] = pd.to_datetime(df_3['Work Order Basic Finish Date'])
+df_3['Work Order Basic Finish Date']=df_3['Work Order Basic Finish Date'].apply(lambda x: dt.datetime.strftime(x,'%d/%m/%Y'))
+
+df_3['Work Order Reference Date'] = pd.to_datetime(df_3['Work Order Reference Date'])
+df_3['Work Order Reference Date']=df_3['Work Order Reference Date'].apply(lambda x: dt.datetime.strftime(x,'%d/%m/%Y'))
+
+df_3['Work Order Reference Date'] = pd.to_datetime(df_3['Work Order Reference Date'])
+df_3['Yr and Mth of WO Reference Date'] = df_3['Work Order Reference Date'].apply(lambda x: dt.datetime.strftime(x,'%b-%Y')) 
+# place the newly created column as the beginning column of the new dataframe
+cols = df_3.columns.tolist()
+df_3 = df_3[[cols[-1]] + cols[:-1]] 
+
+# save the cleaned file
+writer = pd.ExcelWriter('//networkDrive/Datasource/Staged/CTdata/ct_ma.xlsx', engine='xlsxwriter')
+df_3.to_excel(writer, sheet_name='T')
+writer.save()
+
+# save as a backup
+writer = pd.ExcelWriter('//networkDrive/Datasource/Previous data/ct_ma.xlsx', engine='xlsxwriter')
+#df_1 = pd.read_excel('Master(OT)_11.xlsx')
+df_3.to_excel(writer, sheet_name='T')
+writer.save()
+
+#read original file to be appended with new data
+df__2 = pd.read_excel('//networkDrive/Datasource/Staged/Master CT_ND_.xlsx')
+
+df__2.drop('Yr and Mth of WO Reference Date', axis=1, inplace=True)
+
+df__2['Work Order Reference Date'] = pd.to_datetime(df__2['Work Order Reference Date'])
+df__2['Yr and Mth of WO Reference Date'] = df__2['Work Order Reference Date'].apply(lambda x: dt.datetime.strftime(x,'%b-%Y')) 
+# place the newly created column as the beginning column of the new dataframe
+cols = df__2.columns.tolist()
+df__2 = df__2[[cols[-1]] + cols[:-1]] 
+
+df__2.head()
+
+#################################################
+### processing to final dataset for Tableau   ###
+#################################################
+
+##refresh & save: refresh (previous month data)
+df__2 = pd.read_excel('//networkDrive/Datasource/Staged/Master CT_ND_.xlsx')
+df__2 = df__2[df__2['Yr and Mth of WO Reference Date'] != 'Mar-2018']
+df__2.reset_index(drop=True)
+
+##refresh & save: save 
+writer = pd.ExcelWriter('//networkDrive/Datasource/Staged/CTdata/ct_.xlsx', engine='xlsxwriter')
+df__2.to_excel(writer, sheet_name='T')
+writer.save()
+
+## append the fresh data to Master file
+cTs_ = pd.DataFrame()
+for f in glob.glob('//networkDrive/Datasource/Staged/CTdata/ct*.xlsx'):
+    df = pd.read_excel(f)
+    cTs_ = cTs_.append(df,ignore_index=True)
+	
+# save the Tableau dataset	
+writer =  pd.ExcelWriter('//networkDrive/Datasource/CycleTime/Master CT_ND_.xlsx', engine='xlsxwriter')
+cTs_.to_excel(writer, sheet_name='CycleTimeData')
+writer.save()
